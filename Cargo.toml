@@ -2,6 +2,14 @@
 name = "trieve-cli"
 version = "0.1.0"
 edition = "2021"
+authors = ["Trieve <developers@trieve.ai>"]
+license = "MIT"
+description = "CLI interface for Trieve"
+readme = "README.md"
+homepage = "https://github.com/devflowinc/trieve-CLI"
+repository = "https://github.com/devflowinc/trieve-CLI"
+keywords = ["cli", "search", "trieve"]
+categories = ["command-line-utilities"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
