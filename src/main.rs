@@ -64,17 +64,18 @@ struct ListDatasets;
 
 #[derive(Args)]
 struct DeleteDataset {
-    /// The string to reverse
+    /// The ID of the dataset to delete
     dataset_id: Option<String>,
 }
 
 #[derive(Args)]
 struct AddSeedData {
-    /// The string to reverse
-    string: Option<String>,
+    /// The ID of the dataset to add seed data to
+    dataset_id: Option<String>,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args = Cli::parse();
 
     let settings: TrieveConfiguration = confy::load("trieve", None)
@@ -111,8 +112,14 @@ fn main() {
                     })
                     .unwrap();
             }
-            _ => {
-                println!("Command not implemented yet");
+            DatasetCommands::Example(seed_data) => {
+                commands::dataset::add_seed_data(settings, seed_data)
+                    .await
+                    .map_err(|e| {
+                        eprintln!("Error adding seed data: {:?}", e);
+                        std::process::exit(1);
+                    })
+                    .unwrap();
             }
         },
         _ => {
