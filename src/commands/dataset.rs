@@ -303,7 +303,7 @@ pub async fn delete_trieve_dataset(
     };
 
     let data = DeleteDatasetParams {
-        tr_organization: settings.organization_id.to_string().clone(),
+        tr_dataset: dataset_id.clone().unwrap(),
         dataset_id: dataset_id.clone().unwrap(),
     };
 
