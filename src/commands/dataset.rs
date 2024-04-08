@@ -312,17 +312,17 @@ pub async fn delete_trieve_dataset(
         .map_err(|e| DefaultError {
             message: e.to_string(),
         })?
-        .entity
-        .unwrap();
+        .entity;
 
     match result {
-        trieve_client::apis::dataset_api::DeleteDatasetSuccess::Status204() => Ok(()),
-        trieve_client::apis::dataset_api::DeleteDatasetSuccess::UnknownValue(val) => {
-            Err(DefaultError {
+        Some(trieve_client::apis::dataset_api::DeleteDatasetSuccess::Status204()) => (),
+        Some(trieve_client::apis::dataset_api::DeleteDatasetSuccess::UnknownValue(val)) => {
+            return Err(DefaultError {
                 message: format!("Error deleting dataset: {}", val.to_string()),
-            })
+            });
         }
-    }?;
+        None => (),
+    };
 
     println!("Dataset deleted successfully!");
 
