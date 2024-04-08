@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Clone)]
 pub struct TrieveConfiguration {
     pub api_key: String,
-    pub organization_id: String,
+    pub organization_id: uuid::Uuid,
     pub api_url: String,
 }
 
@@ -13,7 +13,7 @@ impl Default for TrieveConfiguration {
     fn default() -> Self {
         TrieveConfiguration {
             api_key: "".to_string(),
-            organization_id: "".to_string(),
+            organization_id: uuid::Uuid::new_v4(),
             api_url: "https://api.trieve.ai".to_string(),
         }
     }
@@ -33,7 +33,14 @@ pub fn parse_configuration(configuration: Configure) {
 
     let settings = TrieveConfiguration {
         api_key: api_key.unwrap(),
-        organization_id: organization_id.unwrap(),
+        organization_id: organization_id
+            .unwrap()
+            .parse()
+            .map_err(|e| {
+                eprintln!("Error parsing Organization ID: {:?}", e);
+                std::process::exit(1);
+            })
+            .unwrap(),
         api_url: configuration.api_url.unwrap(),
     };
 

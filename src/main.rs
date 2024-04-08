@@ -91,13 +91,15 @@ async fn main() {
         }
         Some(Commands::Dataset(dataset)) => match dataset {
             DatasetCommands::List(_) => commands::dataset::list_datasets(settings)
+                .await
                 .map_err(|e| {
                     eprintln!("Error listing datasets: {:?}", e);
                     std::process::exit(1);
                 })
                 .unwrap(),
             DatasetCommands::Create(create) => {
-                commands::dataset::create_dataset(settings, create)
+                commands::dataset::create_trieve_dataset(settings, create)
+                    .await
                     .map_err(|e| {
                         eprintln!("Error creating dataset: {:?}", e);
                         std::process::exit(1);
@@ -105,7 +107,8 @@ async fn main() {
                     .unwrap();
             }
             DatasetCommands::Delete(delete) => {
-                commands::dataset::delete_dataset(settings, delete)
+                commands::dataset::delete_trieve_dataset(settings, delete)
+                    .await
                     .map_err(|e| {
                         eprintln!("Error deleting dataset: {:?}", e);
                         std::process::exit(1);
