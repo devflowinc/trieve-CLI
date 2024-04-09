@@ -23,7 +23,7 @@ struct DatasetAndUsageDTO(DatasetAndUsage);
 
 impl fmt::Display for DatasetAndUsageDTO {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} - {}", self.0.dataset.id, self.0.dataset.name)
+        write!(f, "{} - {}", self.0.dataset.name, self.0.dataset.id)
     }
 }
 
@@ -51,24 +51,6 @@ pub struct DefaultError {
 async fn get_datasets_from_org(
     settings: TrieveConfiguration,
 ) -> Result<Vec<DatasetAndUsage>, DefaultError> {
-    // let response = ureq::get(&format!(
-    //     "{}/api/dataset/organization/{}",
-    //     settings.api_url, settings.organization_id
-    // ))
-    // .set("Authorization", &settings.api_key)
-    // .set("TR-Organization", &settings.organization_id)
-    // .call()?;
-
-    // if response.status() != 200 {
-    //     eprintln!(
-    //         "Error listing datasets: {}",
-    //         response.into_string().unwrap()
-    //     );
-    //     std::process::exit(1);
-    // }
-
-    // let datasets: Vec<DatasetAndUsageDTO> =
-    //     serde_json::from_str(response.into_string().unwrap().as_str()).unwrap(); //TODO: Handle errors
     let config = Configuration {
         base_path: settings.api_url,
         api_key: Some(ApiKey {
@@ -158,28 +140,6 @@ pub async fn create_trieve_dataset(
     if create.name.is_none() {
         name = Some(inquire::Text::new("Dataset Name: ").prompt().unwrap());
     }
-
-    // let response = ureq::post(&format!("{}/api/dataset", settings.api_url))
-    //     .set("Authorization", &settings.api_key)
-    //     .set("TR-Organization", &settings.organization_id)
-    //     .send_json(serde_json::json!({
-    //         "dataset_name": name.unwrap(),
-    //         "organization_id": settings.organization_id,
-    //         "client_configuration": {},
-    //         "server_configuration": {
-    //             "LLM_BASE_URL": "",
-    //             "LLM_DEFAULT_MODEL": "",
-    //             "EMBEDDING_BASE_URL": "https://embedding.trieve.ai",
-    //             "RAG_PROMPT": "",
-    //             "EMBEDDING_SIZE": 768,
-    //             "N_RETRIEVALS_TO_INCLUDE": 8,
-    //             "DUPLICATE_DISTANCE_THRESHOLD": 1.1,
-    //             "DOCUMENT_UPLOAD_FEATURE": true,
-    //             "DOCUMENT_DOWNLOAD_FEATURE": true,
-    //             "COLLISIONS_ENABLED": false,
-    //             "FULLTEXT_ENABLED": true,
-    //         },
-    //     }))?;
 
     let config = Configuration {
         base_path: settings.api_url,
@@ -276,22 +236,6 @@ pub async fn delete_trieve_dataset(
         dataset_id = Some(selected_dataset.0.dataset.id.to_string());
     }
 
-    // let response = ureq::delete(&format!(
-    //     "{}/api/dataset/{}",
-    //     settings.api_url,
-    //     dataset_id.clone().unwrap()
-    // ))
-    // .set("Authorization", &settings.api_key)
-    // .set("TR-Dataset", &dataset_id.clone().unwrap())
-    // .call()?;
-
-    // if response.status() != 200 {
-    //     eprintln!(
-    //         "Error deleting dataset: {}",
-    //         response.into_string().unwrap()
-    //     );
-    //     std::process::exit(1);
-    // }
 
     let config = Configuration {
         base_path: settings.api_url,

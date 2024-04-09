@@ -21,7 +21,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Configures the Trieve CLI with your API key
-    Configure(Configure),
+    Init(Init),
     /// Commands for interacting with datasets in the Trieve service
     #[command(subcommand)]
     Dataset(DatasetCommands),
@@ -40,15 +40,12 @@ enum DatasetCommands {
 }
 
 #[derive(Args)]
-struct Configure {
+struct Init {
     /// API Key from the Trieve dashboard (https://dashboard.trieve.ai)
     #[arg(short, long, env = "TRIEVE_API_KEY")]
     api_key: Option<String>,
-    /// Organization ID from the Trieve dashboard (https://dashboard.trieve.ai)
-    #[arg(short, long, env = "TRIEVE_ORGANIZATION_ID")]
-    organization_id: Option<String>,
     /// The URL of the Trieve server if you are using a self-hosted version of Trieve
-    #[arg(long, default_value = "https://api.trieve.ai", required = false)]
+    #[arg(long, required = false)]
     api_url: Option<String>,
 }
 
@@ -86,8 +83,8 @@ async fn main() {
         .unwrap();
 
     match args.command {
-        Some(Commands::Configure(configure)) => {
-            commands::configure::parse_configuration(configure);
+        Some(Commands::Init(init)) => {
+            commands::configure::init(init, settings).await;
         }
         Some(Commands::Dataset(dataset)) => match dataset {
             DatasetCommands::List(_) => commands::dataset::list_datasets(settings)

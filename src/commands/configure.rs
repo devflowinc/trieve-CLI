@@ -1,6 +1,16 @@
-use crate::Configure;
-use inquire::Text;
+use std::fmt;
+
+use crate::{commands::login_server::server, Init};
+use inquire::{Confirm, Text};
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
+use trieve_client::{
+    apis::{
+        auth_api::get_me,
+        configuration::{ApiKey, Configuration},
+    },
+    models::Organization,
+};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct TrieveConfiguration {
@@ -13,38 +23,185 @@ impl Default for TrieveConfiguration {
     fn default() -> Self {
         TrieveConfiguration {
             api_key: "".to_string(),
-            organization_id: uuid::Uuid::new_v4(),
+            organization_id: uuid::Uuid::nil(),
             api_url: "https://api.trieve.ai".to_string(),
         }
     }
 }
 
-pub fn parse_configuration(configuration: Configure) {
-    let mut api_key = configuration.api_key;
-    let mut organization_id = configuration.organization_id;
-    if api_key.is_none() {
-        println!("An API Key is required to use the Trieve CLI. You can find your API Key in the Trieve dashboard at https://dashboard.trieve.ai.");
-        api_key = Some(Text::new("API Key: ").prompt().unwrap());
-    }
-    if organization_id.is_none() {
-        println!("An Organization ID is required to use the Trieve CLI. You can find your Organization ID in the Trieve dashboard at https://dashboard.trieve.ai.");
-        organization_id = Some(Text::new("Organization ID: ").prompt().unwrap());
-    }
+struct OrgDTO(Organization);
 
-    let settings = TrieveConfiguration {
-        api_key: api_key.unwrap(),
-        organization_id: organization_id
-            .unwrap()
-            .parse()
-            .map_err(|e| {
-                eprintln!("Error parsing Organization ID: {:?}", e);
-                std::process::exit(1);
-            })
-            .unwrap(),
-        api_url: configuration.api_url.unwrap(),
+impl fmt::Display for OrgDTO {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} - {}", self.0.name, self.0.id)
+    }
+}
+
+async fn get_user(api_url: String, api_key: String) -> trieve_client::apis::auth_api::GetMeSuccess {
+    let configuration = Configuration {
+        base_path: api_url.clone(),
+        api_key: Some(ApiKey {
+            prefix: None,
+            key: api_key.clone(),
+        }),
+        ..Default::default()
     };
 
-    confy::store("trieve", None, settings)
+    get_me(&configuration)
+        .await
+        .map_err(|e| {
+            eprintln!("Error getting user: {:?}", e);
+            std::process::exit(1);
+        })
+        .unwrap()
+        .entity
+        .unwrap()
+}
+
+async fn auto_configure(api_url: String) -> TrieveConfiguration {
+    let (tx, mut rx) = mpsc::channel::<String>(100);
+
+    let server = tokio::spawn(async move { server(tx).await });
+
+    let login_url = format!(
+        "{}/api/auth?redirect_uri=http://localhost:8888",
+        api_url.clone(),
+    );
+
+    println!("Please go to {} to complete the configuration.", login_url);
+
+    let cookie = rx.recv().await.unwrap();
+    println!("Received cookie: {}", cookie);
+    server.abort();
+
+    let api_key = ureq::post(format!("{}/api/user/api_key", api_url.clone()).as_str())
+        .set("Cookie", cookie.as_str())
+        .send_json(serde_json::json!({
+           "name": "Trieve CLI",
+           "role": 1
+        }))
+        .map_err(|e| {
+            eprintln!("Error creating API Key: {:?}", e);
+            std::process::exit(1);
+        })
+        .unwrap()
+        .into_json::<ApiKeyResponse>()
+        .unwrap()
+        .api_key;
+
+    let result = get_user(api_url.clone(), api_key.clone()).await;
+
+    match result {
+        trieve_client::apis::auth_api::GetMeSuccess::Status200(user) => {
+            println!("Welcome, {}!", user.name.unwrap().unwrap());
+            let orgs = user
+                .orgs
+                .iter()
+                .map(|org| OrgDTO(org.clone()))
+                .collect::<Vec<OrgDTO>>();
+
+            let selected_organization =
+                inquire::Select::new("Select an organization to use:", orgs)
+                    .prompt()
+                    .unwrap();
+
+            TrieveConfiguration {
+                api_key,
+                organization_id: selected_organization.0.id,
+                api_url: api_url.clone(),
+            }
+        }
+        _ => {
+            eprintln!("Error authenticating: {:?}", result);
+            std::process::exit(1);
+        }
+    }
+}
+
+async fn manual_configure(api_url: String, mut api_key: Option<String>) -> TrieveConfiguration {
+    if api_key.is_none() {
+        println!("An API Key is required to use the Trieve CLI. You can find your API Key in the Trieve dashboard at https://dashboard.trieve.ai.");
+        api_key = Some(
+            Text::new("API Key: ")
+                .prompt()
+                .map_err(|_| {
+                    eprintln!("You must provide an API Key!");
+                    std::process::exit(1);
+                })
+                .unwrap(),
+        );
+    }
+
+    let result = get_user(api_url.clone(), api_key.clone().unwrap()).await;
+
+    match result {
+        trieve_client::apis::auth_api::GetMeSuccess::Status200(user) => {
+            println!("Welcome, {}!", user.name.unwrap().unwrap());
+            let orgs = user
+                .orgs
+                .iter()
+                .map(|org| OrgDTO(org.clone()))
+                .collect::<Vec<OrgDTO>>();
+
+            let selected_organization =
+                inquire::Select::new("Select an organization to use:", orgs)
+                    .prompt()
+                    .unwrap();
+
+            TrieveConfiguration {
+                api_key: api_key.unwrap(),
+                organization_id: selected_organization.0.id,
+                api_url: api_url.clone(),
+            }
+        }
+        _ => {
+            eprintln!("Error authenticating: {:?}", result);
+            std::process::exit(1);
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct ApiKeyResponse {
+    api_key: String,
+}
+
+pub async fn init(init: Init, settings: TrieveConfiguration) {
+    let api_key = init.api_key;
+    let mut api_url = init.api_url;
+
+    if settings.api_key.is_empty() && settings.organization_id.is_nil() {
+        println!("Welcome to the Trieve CLI! Let's get started by configuring your API Key and Organization ID.");
+    } else {
+        println!("Welcome back to the Trieve CLI! Let's update your configuration.");
+    }
+
+    if api_url.is_none() {
+        let use_prod = Confirm::new(
+            "Would you like to use the production Trieve server (https://api.trieve.ai)?",
+        )
+        .with_default(false)
+        .prompt();
+
+        if use_prod.unwrap() {
+            api_url = Some("https://api.trieve.ai".to_string());
+        } else {
+            api_url = Some(Text::new("Trieve Server URL: ").prompt().unwrap());
+        }
+    }
+
+    let auto_config =
+        Confirm::new("Would you like to automatically configure your API Key and Organization ID?")
+            .with_default(true)
+            .prompt();
+
+    let config = if auto_config.unwrap() {
+        auto_configure(api_url.unwrap().clone()).await
+    } else {
+        manual_configure(api_url.unwrap().clone(), api_key).await
+    };
+
+    confy::store("trieve", None, config)
         .map_err(|e| {
             eprintln!("Error saving configuration: {:?}", e);
             std::process::exit(1);
