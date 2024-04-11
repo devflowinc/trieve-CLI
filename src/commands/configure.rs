@@ -1,9 +1,8 @@
 use std::fmt;
 
-use crate::{commands::login_server::server, Init};
+use crate::Init;
 use inquire::{Confirm, Text};
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
 use trieve_client::{
     apis::{
         auth_api::get_me,
@@ -58,69 +57,17 @@ async fn get_user(api_url: String, api_key: String) -> trieve_client::apis::auth
         .unwrap()
 }
 
-async fn auto_configure(api_url: String) -> TrieveConfiguration {
-    let (tx, mut rx) = mpsc::channel::<String>(100);
-
-    let server = tokio::spawn(async move { server(tx).await });
-
-    let login_url = format!(
-        "{}/api/auth?redirect_uri=http://localhost:8888",
-        api_url.clone(),
-    );
-
-    println!("Please go to {} to complete the configuration.", login_url);
-
-    let cookie = rx.recv().await.unwrap();
-    println!("Received cookie: {}", cookie);
-    server.abort();
-
-    let api_key = ureq::post(format!("{}/api/user/api_key", api_url.clone()).as_str())
-        .set("Cookie", cookie.as_str())
-        .send_json(serde_json::json!({
-           "name": "Trieve CLI",
-           "role": 1
-        }))
-        .map_err(|e| {
-            eprintln!("Error creating API Key: {:?}", e);
-            std::process::exit(1);
-        })
-        .unwrap()
-        .into_json::<ApiKeyResponse>()
-        .unwrap()
-        .api_key;
-
-    let result = get_user(api_url.clone(), api_key.clone()).await;
-
-    match result {
-        trieve_client::apis::auth_api::GetMeSuccess::Status200(user) => {
-            println!("Welcome, {}!", user.name.unwrap().unwrap());
-            let orgs = user
-                .orgs
-                .iter()
-                .map(|org| OrgDTO(org.clone()))
-                .collect::<Vec<OrgDTO>>();
-
-            let selected_organization =
-                inquire::Select::new("Select an organization to use:", orgs)
-                    .prompt()
-                    .unwrap();
-
-            TrieveConfiguration {
-                api_key,
-                organization_id: selected_organization.0.id,
-                api_url: api_url.clone(),
-            }
-        }
-        _ => {
-            eprintln!("Error authenticating: {:?}", result);
-            std::process::exit(1);
-        }
-    }
-}
-
-async fn manual_configure(api_url: String, mut api_key: Option<String>) -> TrieveConfiguration {
+async fn configure(api_url: String, mut api_key: Option<String>) -> TrieveConfiguration {
     if api_key.is_none() {
-        println!("An API Key is required to use the Trieve CLI. You can find your API Key in the Trieve dashboard at https://dashboard.trieve.ai.");
+        let auth_url = format!(
+            "{api_url}/api/auth?redirect_uri={api_url}/auth/cli%3Fhost={api_url}",
+            api_url = api_url
+        );
+        println!(
+            "\nPlease go to the following URL to get a Trieve API Key: {}\n",
+            auth_url
+        );
+
         api_key = Some(
             Text::new("API Key: ")
                 .prompt()
@@ -136,7 +83,7 @@ async fn manual_configure(api_url: String, mut api_key: Option<String>) -> Triev
 
     match result {
         trieve_client::apis::auth_api::GetMeSuccess::Status200(user) => {
-            println!("Welcome, {}!", user.name.unwrap().unwrap());
+            println!("\nWelcome, {}!", user.name.unwrap().unwrap());
             let orgs = user
                 .orgs
                 .iter()
@@ -180,7 +127,7 @@ pub async fn init(init: Init, settings: TrieveConfiguration) {
         let use_prod = Confirm::new(
             "Would you like to use the production Trieve server (https://api.trieve.ai)?",
         )
-        .with_default(false)
+        .with_default(true)
         .prompt();
 
         if use_prod.unwrap() {
@@ -190,16 +137,7 @@ pub async fn init(init: Init, settings: TrieveConfiguration) {
         }
     }
 
-    let auto_config =
-        Confirm::new("Would you like to automatically configure your API Key and Organization ID?")
-            .with_default(true)
-            .prompt();
-
-    let config = if auto_config.unwrap() {
-        auto_configure(api_url.unwrap().clone()).await
-    } else {
-        manual_configure(api_url.unwrap().clone(), api_key).await
-    };
+    let config = configure(api_url.unwrap().clone(), api_key).await;
 
     confy::store("trieve", None, config)
         .map_err(|e| {
