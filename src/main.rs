@@ -25,6 +25,9 @@ enum Commands {
     /// Commands for interacting with datasets in the Trieve service
     #[command(subcommand)]
     Dataset(DatasetCommands),
+    //TODO: add command to generate api key
+    #[command(subcommand)]
+    Generate(Generate),
 }
 
 #[derive(Subcommand)]
@@ -37,6 +40,12 @@ enum DatasetCommands {
     Delete(DeleteDataset),
     /// Add seed data to a dataset in the Trieve service
     Example(AddSeedData),
+}
+
+#[derive(Subcommand)]
+enum Generate {
+    /// Generate an API key for the Trieve service
+    ApiKey(ApiKey),
 }
 
 #[derive(Args)]
@@ -70,6 +79,9 @@ struct AddSeedData {
     /// The ID of the dataset to add seed data to
     dataset_id: Option<String>,
 }
+
+#[derive(Args)]
+struct ApiKey;
 
 #[tokio::main]
 async fn main() {
@@ -117,6 +129,17 @@ async fn main() {
                     .await
                     .map_err(|e| {
                         eprintln!("Error adding seed data: {:?}", e);
+                        std::process::exit(1);
+                    })
+                    .unwrap();
+            }
+        },
+        Some(Commands::Generate(generate)) => match generate {
+            Generate::ApiKey(_) => {
+                commands::generate::generate_api_key(settings)
+                    .await
+                    .map_err(|e| {
+                        eprintln!("Error generating API key: {:?}", e);
                         std::process::exit(1);
                     })
                     .unwrap();

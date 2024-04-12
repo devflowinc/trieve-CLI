@@ -146,3 +146,4 @@ pub async fn init(init: Init, settings: TrieveConfiguration) {
         })
         .unwrap();
 }
+
