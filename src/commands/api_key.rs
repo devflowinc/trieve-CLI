@@ -3,33 +3,47 @@ use trieve_client::{
     models::SetUserApiKeyRequest,
 };
 
+use crate::ApiKeyData;
+
 use super::configure::TrieveConfiguration;
 
 pub async fn generate_api_key(
     settings: TrieveConfiguration,
+    api_key_data: ApiKeyData,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if settings.organization_id.to_string().is_empty() || settings.api_key.is_empty() {
         eprintln!("Please configure the Trieve CLI with your credentials. Run `trieve configure` to get started.");
         std::process::exit(1);
     }
 
-    let name = inquire::Text::new("Enter a name for the API Key:")
-        .with_help_message("This name will help you identify the API Key in the future.")
-        .prompt()
-        .unwrap();
+    let name = if api_key_data.name.is_none() {
+        inquire::Text::new("Enter a name for the API Key:")
+            .with_help_message("This name will help you identify the API Key in the future.")
+            .prompt()
+            .unwrap()
+    } else {
+        api_key_data.name.unwrap()
+    };
 
-    let role = inquire::Select::new(
-        "Select a role for the API Key:",
-        vec!["Read + Write", "Read"],
-    )
-    .with_help_message("Read + Write: Can read and write data. Read: Can only read data.")
-    .prompt()
-    .unwrap();
+    let role = if api_key_data.role.is_none() {
+        inquire::Select::new(
+            "Select a role for the API Key:",
+            vec!["Read + Write", "Read"],
+        )
+        .prompt()
+        .unwrap()
+        .to_string()
+    } else {
+        api_key_data.role.unwrap()
+    };
 
     let role_num = match role {
-        "Read + Write" => 1,
-        "Read" => 0,
-        _ => 0,
+        r if r == "Read + Write" => 0,
+        r if r == "Read" => 1,
+        _ => {
+            eprintln!("Invalid role: {}", role);
+            std::process::exit(1);
+        }
     };
 
     let config = Configuration {
