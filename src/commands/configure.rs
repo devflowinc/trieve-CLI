@@ -133,7 +133,12 @@ pub async fn init(init: Init, settings: TrieveConfiguration) {
         if use_prod.unwrap() {
             api_url = Some("https://api.trieve.ai".to_string());
         } else {
-            api_url = Some(Text::new("Trieve Server URL: ").prompt().unwrap());
+            api_url = Some(
+                Text::new("Trieve Server URL: ")
+                    .with_default("http://localhost:8090")
+                    .prompt()
+                    .unwrap(),
+            );
         }
     }
 
@@ -146,4 +151,3 @@ pub async fn init(init: Init, settings: TrieveConfiguration) {
         })
         .unwrap();
 }
-
