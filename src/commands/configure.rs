@@ -242,6 +242,7 @@ pub async fn login(init: Login, settings: TrieveConfiguration) {
     }
 
     profiles.dedup_by_key(|p| p.name.clone());
+    profiles.iter_mut().for_each(|p| p.selected = false);
 
     profiles.push(TrieveProfileInner {
         name: profile_name,

@@ -38,8 +38,8 @@ pub async fn generate_api_key(
     };
 
     let role_num = match role {
-        r if r == "Read + Write" => 0,
-        r if r == "Read" => 1,
+        r if r == "Read + Write" => 1,
+        r if r == "Read" => 0,
         _ => {
             eprintln!("Invalid role: {}", role);
             std::process::exit(1);

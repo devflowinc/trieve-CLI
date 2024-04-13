@@ -1,5 +1,5 @@
 use crate::{
-    commands::configure::{get_user, OrgDTO},
+    commands::configure::{get_user, OrgDTO, TrieveProfile},
     SwitchOrganization,
 };
 
@@ -70,7 +70,7 @@ pub async fn switch_organization(
         })
         .collect::<Vec<TrieveProfileInner>>();
 
-    confy::store("trieve", "profiles", profiles)
+    confy::store("trieve", "profiles", TrieveProfile { inner: profiles })
         .map_err(|e| {
             eprintln!("Error saving configuration: {:?}", e);
             std::process::exit(1);

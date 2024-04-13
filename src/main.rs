@@ -16,6 +16,9 @@ mod commands;
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
+    /// The name of the profile to use
+    #[arg(short, long, env = "TRIEVE_PROFILE")]
+    profile: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -54,6 +57,7 @@ enum Organization {
 enum ApiKeyCommands {
     /// Generate a new API Key
     Generate(ApiKeyData),
+    //TODO: List API Keys, Delete API Key
 }
 
 #[derive(Subcommand)]
@@ -141,12 +145,28 @@ async fn main() {
         })
         .unwrap_or_default();
 
-    let settings = profiles
-        .iter()
-        .find(|p| p.selected)
-        .cloned()
-        .unwrap_or_default()
-        .settings;
+    let settings = if args.profile.is_some() {
+        let profile_name = args.profile.unwrap();
+        let profile = profiles
+            .inner
+            .iter()
+            .find(|p| p.name == profile_name)
+            .ok_or_else(|| {
+                eprintln!("Profile '{}' not found.", profile_name);
+                std::process::exit(1);
+            })
+            .unwrap();
+
+        profile.settings.clone()
+    } else {
+        profiles
+            .inner
+            .iter()
+            .find(|p| p.selected)
+            .cloned()
+            .unwrap_or_default()
+            .settings
+    };
 
     match args.command {
         Some(Commands::Login(login)) => {
