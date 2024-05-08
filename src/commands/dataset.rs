@@ -544,10 +544,8 @@ pub async fn add_seed_data(
     );
 
     match selected_example {
-        "YC Companies Example" => add_yc_companies_seed_data(settings.clone(), dataset_id).await?,
-        "PhilosiphizeThis Example (contains groups)" => {
-            add_philosiphize_this_seed_data(settings.clone(), dataset_id).await?
-        }
+        "YC Companies" => add_yc_companies_seed_data(settings.clone(), dataset_id).await?,
+        "PhilosiphizeThis" => add_philosiphize_this_seed_data(settings.clone(), dataset_id).await?,
         _ => {
             eprintln!("Invalid example dataset selected: {}", selected_example);
             std::process::exit(1);
