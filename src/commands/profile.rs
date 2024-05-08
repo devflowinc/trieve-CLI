@@ -1,3 +1,5 @@
+use tabled::{builder::Builder, settings::Style};
+
 use crate::{commands::configure::TrieveProfile, DeleteProfile, SwitchProfile};
 
 use super::configure::TrieveProfileInner;
@@ -11,6 +13,7 @@ pub fn switch_profile(
             "Select a profile to switch to:",
             profiles.iter().map(|p| p.name.clone()).collect(),
         )
+        .with_starting_cursor(profiles.iter().position(|p| p.selected).unwrap_or(0))
         .prompt()
         .unwrap();
         profile_name
@@ -52,6 +55,34 @@ pub fn switch_profile(
         .unwrap();
 
     println!("Switched to profile '{}'.", profile_name);
+
+    Ok(())
+}
+
+pub fn list_profiles(
+    mut profiles: Vec<TrieveProfileInner>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut builder = Builder::default();
+
+    profiles.sort_by(|a, b| b.selected.cmp(&a.selected));
+
+    builder.push_record(["Name", "API Url", "Selected"]);
+
+    for profile in profiles {
+        builder.push_record([
+            profile.name,
+            profile.settings.api_url,
+            if profile.selected {
+                "✔".to_owned()
+            } else {
+                "".to_owned()
+            },
+        ]);
+    }
+
+    let table = builder.build().with(Style::rounded()).to_string();
+    println!("Profiles:");
+    println!("{}", table);
 
     Ok(())
 }

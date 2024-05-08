@@ -44,6 +44,8 @@ enum Profile {
     Switch(SwitchProfile),
     /// Delete a profile
     Delete(DeleteProfile),
+    /// List all profiles
+    List(ListProfile),
 }
 
 #[derive(Subcommand)]
@@ -128,6 +130,9 @@ struct DeleteProfile {
     /// The name of the profile to delete
     profile_name: Option<String>,
 }
+
+#[derive(Args)]
+struct ListProfile;
 
 #[derive(Args)]
 struct SwitchOrganization {
@@ -232,6 +237,14 @@ async fn main() {
                 commands::profile::delete_profile(delete, profiles.to_vec())
                     .map_err(|e| {
                         eprintln!("Error deleting profile: {:?}", e);
+                        std::process::exit(1);
+                    })
+                    .unwrap();
+            }
+            Profile::List(_) => {
+                commands::profile::list_profiles(profiles.to_vec())
+                    .map_err(|e| {
+                        eprintln!("Error listing profiles: {:?}", e);
                         std::process::exit(1);
                     })
                     .unwrap();

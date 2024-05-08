@@ -12,7 +12,7 @@ pub async fn generate_api_key(
     api_key_data: ApiKeyData,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if settings.organization_id.to_string().is_empty() || settings.api_key.is_empty() {
-        eprintln!("Please configure the Trieve CLI with your credentials. Run `trieve configure` to get started.");
+        eprintln!("Please login to the Trieve CLI with your credentials. Run `trieve login` to get started.");
         std::process::exit(1);
     }
 

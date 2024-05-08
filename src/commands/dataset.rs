@@ -1,17 +1,20 @@
 use chrono::NaiveDateTime;
+use csv::ReaderBuilder;
 use inquire::Confirm;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tabled::{builder::Builder, settings::Style};
 use trieve_client::{
     apis::{
         chunk_api::{create_chunk, CreateChunkParams},
+        chunk_group_api::create_chunk_group,
         configuration::{ApiKey, Configuration},
         dataset_api::{
             create_dataset, delete_dataset, get_datasets_from_organization, CreateDatasetParams,
             DeleteDatasetParams, GetDatasetsFromOrganizationParams,
         },
     },
-    models::{ChunkData, CreateDatasetRequest, Dataset, DatasetAndUsage},
+    models::{ChunkData, CreateChunkGroupData, CreateDatasetRequest, Dataset, DatasetAndUsage},
 };
 
 use crate::{AddSeedData, CreateDataset, DeleteDataset};
@@ -32,15 +35,6 @@ struct DatasetUsage {
     chunk_count: u32,
     id: String,
     dataset_id: String,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-struct CreateTrieveChunkData {
-    chunk_html: String,
-    link: String,
-    tag_set: Vec<String>,
-    tracking_id: String,
-    metadata: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -86,7 +80,7 @@ async fn get_datasets_from_org(
 
 pub async fn list_datasets(settings: TrieveConfiguration) -> Result<(), DefaultError> {
     if settings.organization_id.to_string().is_empty() || settings.api_key.is_empty() {
-        eprintln!("Please configure the Trieve CLI with your credentials. Run `trieve configure` to get started.");
+        eprintln!("Please login to the Trieve CLI with your credentials. Run `trieve login` to get started.");
         std::process::exit(1);
     }
 
@@ -132,7 +126,7 @@ pub async fn create_trieve_dataset(
     create: CreateDataset,
 ) -> Result<Dataset, DefaultError> {
     if settings.organization_id.to_string().is_empty() || settings.api_key.is_empty() {
-        eprintln!("Please configure the Trieve CLI with your credentials. Run `trieve configure` to get started.");
+        eprintln!("Please login to the Trieve CLI with your credentials. Run `trieve login` to get started.");
         std::process::exit(1);
     }
 
@@ -203,7 +197,7 @@ pub async fn delete_trieve_dataset(
     delete: DeleteDataset,
 ) -> Result<(), DefaultError> {
     if settings.organization_id.to_string().is_empty() || settings.api_key.is_empty() {
-        eprintln!("Please configure the Trieve CLI with your credentials. Run `trieve configure` to get started.");
+        eprintln!("Please login to the Trieve CLI with your credentials. Run `trieve login` to get started.");
         std::process::exit(1);
     }
 
@@ -235,7 +229,6 @@ pub async fn delete_trieve_dataset(
 
         dataset_id = Some(selected_dataset.0.dataset.id.to_string());
     }
-
 
     let config = Configuration {
         base_path: settings.api_url,
@@ -273,12 +266,236 @@ pub async fn delete_trieve_dataset(
     Ok(())
 }
 
+async fn add_yc_companies_seed_data(
+    settings: TrieveConfiguration,
+    dataset_id: Option<String>,
+) -> Result<(), DefaultError> {
+    let response = ureq::get("https://gist.githubusercontent.com/densumesh/127bd58e026ccadaea58dc1aa3ad9648/raw/1dcf2fe14954047064ef5cfbec43bf74d54365d8/yc-company-data.csv").call().map_err(
+        |e| DefaultError {
+            message: e.to_string(),
+        }
+    )?;
+
+    let mut rdr = csv::Reader::from_reader(response.into_reader());
+
+    let chunk_data: Vec<ChunkData> = rdr
+        .records()
+        .map(|record| {
+            let record = record.expect("Error reading CSV record");
+            let chunk_data = ChunkData {
+                chunk_html: Some(Some(record[0].to_string().replace(";", ","))),
+                link: Some(Some(record[1].to_string().replace(";", ","))),
+                tag_set: Some(Some(record[2].split("|").map(|s| s.to_string()).collect())),
+                tracking_id: Some(Some(record[3].to_string())),
+                metadata: Some(Some(
+                    record[4].to_string().replace(";", ",").parse().unwrap(),
+                )),
+                upsert_by_tracking_id: Some(Some(true)),
+                ..Default::default()
+            };
+            chunk_data
+        })
+        .collect();
+
+    let mut handles = vec![];
+
+    for chunk in chunk_data.chunks(30) {
+        let settings = settings.clone();
+        let dataset_id = dataset_id.clone();
+        let chunk = chunk.to_vec();
+        let handle = tokio::spawn(async move {
+            let config = Configuration {
+                base_path: settings.api_url,
+                api_key: Some(ApiKey {
+                    prefix: None,
+                    key: settings.api_key,
+                }),
+                ..Default::default()
+            };
+
+            let data = CreateChunkParams {
+                tr_dataset: dataset_id.clone().unwrap(),
+                create_chunk_data: trieve_client::models::CreateChunkData::CreateBatchChunkData(
+                    chunk,
+                ),
+            };
+
+            let result = create_chunk(&config, data)
+                .await
+                .map_err(|e| DefaultError {
+                    message: e.to_string(),
+                })?
+                .entity
+                .unwrap();
+
+            match result {
+                trieve_client::apis::chunk_api::CreateChunkSuccess::Status200(_) => Ok(()),
+                trieve_client::apis::chunk_api::CreateChunkSuccess::UnknownValue(val) => {
+                    Err(DefaultError {
+                        message: format!("Error adding seed data: {}", val.to_string()),
+                    })
+                }
+            }
+        });
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        let _ = handle.await.unwrap().map_err(|e| {
+            eprintln!("Error adding seed data: {}", e.message);
+        });
+    }
+
+    Ok(())
+}
+
+async fn add_philosiphize_this_seed_data(
+    settings: TrieveConfiguration,
+    dataset_id: Option<String>,
+) -> Result<(), DefaultError> {
+    let groups_to_create = ureq::get("https://gist.githubusercontent.com/densumesh/241be979beb48b05a01591b7ff40ddca/raw/83ad1c0c75c016832368183fc2cb86cb3d7f9c50/philosiphizethis-epLinks.csv").call().map_err(
+        |e| DefaultError {
+            message: e.to_string(),
+        }
+    )?;
+
+    let config = Configuration {
+        base_path: settings.api_url.clone(),
+        api_key: Some(ApiKey {
+            prefix: None,
+            key: settings.api_key.clone(),
+        }),
+        ..Default::default()
+    };
+
+    let mut group_rdr = csv::Reader::from_reader(groups_to_create.into_reader());
+
+    let group_data: Vec<CreateChunkGroupData> = group_rdr
+        .records()
+        .map(|record| {
+            let record = record.expect("Error reading CSV record");
+            let group_data = CreateChunkGroupData {
+                name: record[1].to_string(),
+                tracking_id: Some(Some(record[1].to_string())),
+                ..Default::default()
+            };
+            group_data
+        })
+        .collect();
+
+    for group in group_data {
+        let data = trieve_client::apis::chunk_group_api::CreateChunkGroupParams {
+            tr_dataset: dataset_id.clone().unwrap(),
+            create_chunk_group_data: group,
+        };
+
+        let result = create_chunk_group(&config, data)
+            .await
+            .map_err(|e| DefaultError {
+                message: e.to_string(),
+            })?
+            .entity
+            .unwrap();
+
+        match result {
+            trieve_client::apis::chunk_group_api::CreateChunkGroupSuccess::Status200(_) => continue,
+            trieve_client::apis::chunk_group_api::CreateChunkGroupSuccess::UnknownValue(val) => {
+                return Err(DefaultError {
+                    message: format!("Error creating group: {}", val.to_string()),
+                });
+            }
+        }
+    }
+
+    let chunks_to_create = ureq::get("https://gist.githubusercontent.com/densumesh/33f34fa0ca115723b2c25a862a2d2a4b/raw/f282e21f12ccaa2ad10a8fa831d238fa4a8aa1b0/philosiphizethis-chunksToCreate.csv").call().map_err(
+        |e| DefaultError {
+            message: e.to_string(),
+        }
+    )?;
+
+    let mut chunk_rdr = ReaderBuilder::new()
+        .delimiter(b'|')
+        .from_reader(chunks_to_create.into_reader());
+
+    let chunk_data: Vec<ChunkData> = chunk_rdr
+        .records()
+        .map(|record| {
+            let record = record.expect("Error reading CSV record");
+            let chunk_data = ChunkData {
+                group_tracking_ids: Some(Some(vec![record[0].to_string()])),
+                tracking_id: Some(Some(record[1].to_string())),
+                chunk_html: Some(Some(record[2].to_string())),
+                time_stamp: Some(Some(record[3].to_string())),
+                link: Some(Some(record[4].to_string())),
+                metadata: Some(Some(json!({
+                    "episode_number": record[5].to_string(),
+                    "episode_title": record[6].to_string(),
+                }))),
+                upsert_by_tracking_id: Some(Some(true)),
+                ..Default::default()
+            };
+            chunk_data
+        })
+        .collect();
+
+    let mut handles = vec![];
+
+    for chunk in chunk_data.chunks(30) {
+        let settings = settings.clone();
+        let dataset_id = dataset_id.clone();
+        let chunk = chunk.to_vec();
+        let handle = tokio::spawn(async move {
+            let config = Configuration {
+                base_path: settings.api_url,
+                api_key: Some(ApiKey {
+                    prefix: None,
+                    key: settings.api_key,
+                }),
+                ..Default::default()
+            };
+
+            let data = CreateChunkParams {
+                tr_dataset: dataset_id.clone().unwrap(),
+                create_chunk_data: trieve_client::models::CreateChunkData::CreateBatchChunkData(
+                    chunk,
+                ),
+            };
+
+            let result = create_chunk(&config, data)
+                .await
+                .map_err(|e| DefaultError {
+                    message: e.to_string(),
+                })?
+                .entity
+                .unwrap();
+
+            match result {
+                trieve_client::apis::chunk_api::CreateChunkSuccess::Status200(_) => Ok(()),
+                trieve_client::apis::chunk_api::CreateChunkSuccess::UnknownValue(val) => {
+                    Err(DefaultError {
+                        message: format!("Error adding seed data: {:?}", val.as_object()),
+                    })
+                }
+            }
+        });
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        let _ = handle.await.unwrap().map_err(|e| {
+            eprintln!("Error adding seed data: {}", e.message);
+        });
+    }
+
+    Ok(())
+}
+
 pub async fn add_seed_data(
     settings: TrieveConfiguration,
     seed_data: AddSeedData,
 ) -> Result<(), DefaultError> {
     if settings.organization_id.to_string().is_empty() || settings.api_key.is_empty() {
-        eprintln!("Please configure the Trieve CLI with your credentials. Run `trieve configure` to get started.");
+        eprintln!("Please login to the Trieve CLI with your credentials. Run `trieve login` to get started.");
         std::process::exit(1);
     }
 
@@ -314,94 +531,29 @@ pub async fn add_seed_data(
         }
     }
 
-    let response = ureq::get("https://gist.githubusercontent.com/densumesh/127bd58e026ccadaea58dc1aa3ad9648/raw/1dcf2fe14954047064ef5cfbec43bf74d54365d8/yc-company-data.csv").call().map_err(
-        |e| DefaultError {
-            message: e.to_string(),
-        }
-    )?;
-
-    let mut rdr = csv::Reader::from_reader(response.into_reader());
-
-    let chunk_data: Vec<CreateTrieveChunkData> = rdr
-        .records()
-        .map(|record| {
-            let record = record.expect("Error reading CSV record");
-            let chunk_data = CreateTrieveChunkData {
-                chunk_html: record[0].to_string().replace(";", ","),
-                link: record[1].to_string().replace(";", ","),
-                tag_set: record[2].split("|").map(|s| s.to_string()).collect(),
-                tracking_id: record[3].to_string(),
-                metadata: record[4].to_string().replace(";", ",").parse().unwrap(),
-            };
-            chunk_data
-        })
-        .collect();
+    let selected_example = inquire::Select::new(
+        "Select an example dataset to add:",
+        vec!["YC Companies", "PhilosiphizeThis"],
+    )
+    .prompt()
+    .unwrap();
 
     println!(
         "Adding seed data to dataset: {}",
         dataset_id.clone().unwrap()
     );
 
-    let mut handles = vec![];
-
-    for chunk in chunk_data.chunks(30) {
-        let settings = settings.clone();
-        let dataset_id = dataset_id.clone();
-        let chunk = chunk.to_vec();
-        let handle = tokio::spawn(async move {
-            let config = Configuration {
-                base_path: settings.api_url,
-                api_key: Some(ApiKey {
-                    prefix: None,
-                    key: settings.api_key,
-                }),
-                ..Default::default()
-            };
-
-            let data = CreateChunkParams {
-                tr_dataset: dataset_id.clone().unwrap(),
-                create_chunk_data: trieve_client::models::CreateChunkData::CreateBatchChunkData(
-                    chunk
-                        .iter()
-                        .map(|c| ChunkData {
-                            chunk_html: Some(Some(c.chunk_html.clone())),
-                            link: Some(Some(c.link.clone())),
-                            tag_set: Some(Some(c.tag_set.clone())),
-                            tracking_id: Some(Some(c.tracking_id.clone())),
-                            metadata: Some(Some(c.metadata.clone())),
-                            upsert_by_tracking_id: Some(Some(true)),
-                            ..Default::default()
-                        })
-                        .collect(),
-                ),
-            };
-
-            let result = create_chunk(&config, data)
-                .await
-                .map_err(|e| DefaultError {
-                    message: e.to_string(),
-                })?
-                .entity
-                .unwrap();
-
-            match result {
-                trieve_client::apis::chunk_api::CreateChunkSuccess::Status200(_) => Ok(()),
-                trieve_client::apis::chunk_api::CreateChunkSuccess::UnknownValue(val) => {
-                    Err(DefaultError {
-                        message: format!("Error adding seed data: {}", val.to_string()),
-                    })
-                }
-            }
-        });
-        handles.push(handle);
+    match selected_example {
+        "YC Companies Example" => add_yc_companies_seed_data(settings.clone(), dataset_id).await?,
+        "PhilosiphizeThis Example (contains groups)" => {
+            add_philosiphize_this_seed_data(settings.clone(), dataset_id).await?
+        }
+        _ => {
+            eprintln!("Invalid example dataset selected: {}", selected_example);
+            std::process::exit(1);
+        }
     }
 
-    for handle in handles {
-        let _ = handle.await.unwrap().map_err(|e| {
-            eprintln!("Error adding seed data: {}", e.message);
-        });
-    }
-
-    println!("Seed data added successfully! Access your dataset at: https://search.trieve.ai/?dataset={}", dataset_id.clone().unwrap());
+    println!("Example dataset added successfully!");
     Ok(())
 }
