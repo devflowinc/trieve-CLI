@@ -38,7 +38,7 @@ async fn handle_read(stream: &mut TcpStream, tx: mpsc::Sender<String>) {
     match stream.read(&mut buf).await {
         Ok(_) => {
             let req_str = String::from_utf8_lossy(&buf);
-            let _ = tx.send(extract_api_key(&req_str.as_ref()).unwrap()).await;
+            let _ = tx.send(extract_api_key(req_str.as_ref()).unwrap()).await;
         }
         Err(e) => println!("Unable to read stream: {}", e),
     }

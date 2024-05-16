@@ -113,7 +113,7 @@ pub fn delete_profile(
     let mut profiles = profiles
         .iter()
         .filter(|p| p.name != profile_name)
-        .map(|p| p.clone())
+        .cloned()
         .collect::<Vec<TrieveProfileInner>>();
 
     if profile.selected {

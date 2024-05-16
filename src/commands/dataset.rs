@@ -72,7 +72,7 @@ async fn get_datasets_from_org(
         ) => Ok(datasets),
         trieve_client::apis::dataset_api::GetDatasetsFromOrganizationSuccess::UnknownValue(val) => {
             Err(DefaultError {
-                message: format!("Error getting datasets: {}", val.to_string()),
+                message: format!("Error getting datasets: {}", val),
             })
         }
     }
@@ -147,7 +147,7 @@ pub async fn create_trieve_dataset(
     let data = CreateDatasetParams {
         tr_organization: settings.organization_id.to_string().clone(),
         create_dataset_request: CreateDatasetRequest {
-            organization_id: settings.organization_id.clone(),
+            organization_id: settings.organization_id,
             dataset_name: name.unwrap(),
             client_configuration: Some(serde_json::json!({})),
             server_configuration: Some(serde_json::json!({
@@ -178,13 +178,13 @@ pub async fn create_trieve_dataset(
         trieve_client::apis::dataset_api::CreateDatasetSuccess::Status200(dataset) => Ok(dataset),
         trieve_client::apis::dataset_api::CreateDatasetSuccess::UnknownValue(val) => {
             Err(DefaultError {
-                message: format!("Error creating dataset: {}", val.to_string()),
+                message: format!("Error creating dataset: {}", val),
             })
         }
     }?;
 
     println!("Dataset created successfully!");
-    println!("");
+    println!();
     println!("ID: {}", dataset.id);
     println!("Name: {}", dataset.name);
     println!("Organization ID: {}", dataset.organization_id);
@@ -255,7 +255,7 @@ pub async fn delete_trieve_dataset(
         Some(trieve_client::apis::dataset_api::DeleteDatasetSuccess::Status204()) => (),
         Some(trieve_client::apis::dataset_api::DeleteDatasetSuccess::UnknownValue(val)) => {
             return Err(DefaultError {
-                message: format!("Error deleting dataset: {}", val.to_string()),
+                message: format!("Error deleting dataset: {}", val),
             });
         }
         None => (),
@@ -283,12 +283,12 @@ async fn add_yc_companies_seed_data(
         .map(|record| {
             let record = record.expect("Error reading CSV record");
             let chunk_data = ChunkData {
-                chunk_html: Some(Some(record[0].to_string().replace(";", ","))),
-                link: Some(Some(record[1].to_string().replace(";", ","))),
-                tag_set: Some(Some(record[2].split("|").map(|s| s.to_string()).collect())),
+                chunk_html: Some(Some(record[0].to_string().replace(';', ","))),
+                link: Some(Some(record[1].to_string().replace(';', ","))),
+                tag_set: Some(Some(record[2].split('|').map(|s| s.to_string()).collect())),
                 tracking_id: Some(Some(record[3].to_string())),
                 metadata: Some(Some(
-                    record[4].to_string().replace(";", ",").parse().unwrap(),
+                    record[4].to_string().replace(';', ",").parse().unwrap(),
                 )),
                 upsert_by_tracking_id: Some(Some(true)),
                 ..Default::default()
@@ -332,7 +332,7 @@ async fn add_yc_companies_seed_data(
                 trieve_client::apis::chunk_api::CreateChunkSuccess::Status200(_) => Ok(()),
                 trieve_client::apis::chunk_api::CreateChunkSuccess::UnknownValue(val) => {
                     Err(DefaultError {
-                        message: format!("Error adding seed data: {}", val.to_string()),
+                        message: format!("Error adding seed data: {}", val),
                     })
                 }
             }
@@ -341,9 +341,7 @@ async fn add_yc_companies_seed_data(
     }
 
     for handle in handles {
-        let _ = handle.await.unwrap().map_err(|e| {
-            eprintln!("Error adding seed data: {}", e.message);
-        });
+        let _ = handle.await.unwrap();
     }
 
     Ok(())
@@ -374,12 +372,11 @@ async fn add_philosiphize_this_seed_data(
         .records()
         .map(|record| {
             let record = record.expect("Error reading CSV record");
-            let group_data = CreateChunkGroupData {
+            CreateChunkGroupData {
                 name: record[1].to_string(),
                 tracking_id: Some(Some(record[1].to_string())),
                 ..Default::default()
-            };
-            group_data
+            }
         })
         .collect();
 
@@ -401,7 +398,7 @@ async fn add_philosiphize_this_seed_data(
             trieve_client::apis::chunk_group_api::CreateChunkGroupSuccess::Status200(_) => continue,
             trieve_client::apis::chunk_group_api::CreateChunkGroupSuccess::UnknownValue(val) => {
                 return Err(DefaultError {
-                    message: format!("Error creating group: {}", val.to_string()),
+                    message: format!("Error creating group: {}", val),
                 });
             }
         }
@@ -421,7 +418,7 @@ async fn add_philosiphize_this_seed_data(
         .records()
         .map(|record| {
             let record = record.expect("Error reading CSV record");
-            let chunk_data = ChunkData {
+            ChunkData {
                 group_tracking_ids: Some(Some(vec![record[0].to_string()])),
                 tracking_id: Some(Some(record[1].to_string())),
                 chunk_html: Some(Some(record[2].to_string())),
@@ -433,8 +430,7 @@ async fn add_philosiphize_this_seed_data(
                 }))),
                 upsert_by_tracking_id: Some(Some(true)),
                 ..Default::default()
-            };
-            chunk_data
+            }
         })
         .collect();
 
@@ -482,9 +478,7 @@ async fn add_philosiphize_this_seed_data(
     }
 
     for handle in handles {
-        let _ = handle.await.unwrap().map_err(|e| {
-            eprintln!("Error adding seed data: {}", e.message);
-        });
+        let _ = handle.await.unwrap();
     }
 
     Ok(())
