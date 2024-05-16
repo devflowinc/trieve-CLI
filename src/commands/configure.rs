@@ -76,6 +76,7 @@ impl Default for TrieveConfiguration {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OrgDTO(pub Organization);
 
 impl fmt::Display for OrgDTO {

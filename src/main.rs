@@ -52,7 +52,10 @@ enum Profile {
 enum Organization {
     /// Switch to a different organization
     Switch(SwitchOrganization),
-    //TODO: Delete an organization, Create an organization
+    /// Create an organization
+    Create(CreateOrganization),
+    /// Delete an organization
+    Delete(DeleteOrganization)
 }
 
 #[derive(Subcommand)]
@@ -137,6 +140,18 @@ struct ListProfile;
 #[derive(Args)]
 struct SwitchOrganization {
     /// The ID of the organization to switch to
+    organization_id: Option<String>,
+}
+
+#[derive(Args)]
+struct CreateOrganization {
+    /// The name of the organization to create
+    name: Option<String>,
+}
+
+#[derive(Args)]
+struct DeleteOrganization {
+    /// The ID of the organization to delete
     organization_id: Option<String>,
 }
 
@@ -256,6 +271,24 @@ async fn main() {
                     .await
                     .map_err(|e| {
                         eprintln!("Error switching organization: {:?}", e);
+                        std::process::exit(1);
+                    })
+                    .unwrap();
+            }
+            Organization::Create(create) => {
+                commands::organization::create_organization(create, settings)
+                    .await
+                    .map_err(|e| {
+                        eprintln!("Error creating organization: {:?}", e);
+                        std::process::exit(1);
+                    })
+                    .unwrap();
+            }
+            Organization::Delete(delete) => {
+                commands::organization::delete_organization(delete, settings)
+                    .await
+                    .map_err(|e| {
+                        eprintln!("Error deleting organization: {:?}", e);
                         std::process::exit(1);
                     })
                     .unwrap();
