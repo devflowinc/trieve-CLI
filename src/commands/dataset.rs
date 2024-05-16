@@ -163,6 +163,7 @@ pub async fn create_trieve_dataset(
                 "COLLISIONS_ENABLED": false,
                 "FULLTEXT_ENABLED": true,
             })),
+            tracking_id: None,
         },
     };
 
@@ -341,7 +342,9 @@ async fn add_yc_companies_seed_data(
     }
 
     for handle in handles {
-        let _ = handle.await.unwrap();
+        let _ = handle.await.unwrap().map_err(|e| {
+            eprintln!("Error adding seed data: {:?}", e);
+        });
     }
 
     Ok(())
@@ -478,7 +481,9 @@ async fn add_philosiphize_this_seed_data(
     }
 
     for handle in handles {
-        let _ = handle.await.unwrap();
+        let _ = handle.await.unwrap().map_err(|e| {
+            eprintln!("Error adding seed data: {:?}", e);
+        });
     }
 
     Ok(())
