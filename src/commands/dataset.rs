@@ -300,7 +300,7 @@ async fn add_yc_companies_seed_data(
 
     let mut handles = vec![];
 
-    for chunk in chunk_data.chunks(30) {
+    for chunk in chunk_data.chunks(120) {
         let settings = settings.clone();
         let dataset_id = dataset_id.clone();
         let chunk = chunk.to_vec();
@@ -619,7 +619,7 @@ async fn add_philosophize_this_seed_data(
 
     let mut handles = vec![];
 
-    for chunk in chunk_data.chunks(30) {
+    for chunk in chunk_data.chunks(120) {
         let settings = settings.clone();
         let dataset_id = dataset_id.clone();
         let chunk = chunk.to_vec();
