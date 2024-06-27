@@ -364,6 +364,20 @@ async fn add_trieve_mintlify_docs(
     Ok(res)
 }
 
+async fn add_mintlify_docs(
+    settings: TrieveConfiguration,
+    dataset_id: Option<String>,
+) -> Result<(), DefaultError> {
+    let res = add_json_dataset(
+        "https://gist.githubusercontent.com/densumesh/0400c4519e55dfcd8d8d2e4a171fc531/raw/df73e08c4173128ba321f506ff763b2bdce4e273/mintlify_chunks.json",
+        settings,
+        dataset_id,
+    )
+    .await?;
+
+    Ok(res)
+}
+
 async fn add_json_dataset(
     gist_url: &str,
     settings: TrieveConfiguration,
@@ -394,19 +408,12 @@ async fn add_json_dataset(
         .iter()
         .for_each(|chunk| {
             let chunk = chunk.as_object().expect("Should always be an object");
-            let cur_group_tracking_ids = chunk["group_tracking_ids"]
-                .as_array()
-                .unwrap_or(&vec![])
-                .iter()
-                .map(|tracking_id| {
-                    tracking_id
-                        .as_str()
-                        .expect("Should always be a string")
-                        .to_string()
+            let cur_group_tracking_ids = chunk.get("group_tracking_ids").map(|g| {
+                g.as_array().map(|a| {
+                    a.iter().for_each(|v| {
+                        group_tracking_ids.insert(v.as_str().unwrap().to_string());
+                    })
                 })
-                .collect::<HashSet<String>>();
-            cur_group_tracking_ids.iter().for_each(|tracking_id| {
-                group_tracking_ids.insert(tracking_id.clone());
             });
         });
 
@@ -513,9 +520,7 @@ async fn add_json_dataset(
     }
 
     for handle in handles {
-        let _ = handle.await.unwrap().map_err(|e| {
-            eprintln!("Error adding seed data: {:?}", e);
-        });
+        let _ = handle.await.unwrap();
     }
 
     Ok(())
@@ -703,7 +708,12 @@ pub async fn add_seed_data(
 
     let selected_example = inquire::Select::new(
         "Select an example dataset to add:",
-        vec!["YC Companies", "PhilosiphizeThis"],
+        vec![
+            "YC Companies",
+            "PhilosiphizeThis",
+            "Trieve Docs",
+            "Mintlify Docs",
+        ],
     )
     .prompt()
     .unwrap();
@@ -717,6 +727,7 @@ pub async fn add_seed_data(
         "YC Companies" => add_yc_companies_seed_data(settings.clone(), dataset_id).await?,
         "PhilosiphizeThis" => add_philosophize_this_seed_data(settings.clone(), dataset_id).await?,
         "Trieve Docs" => add_trieve_mintlify_docs(settings.clone(), dataset_id).await?,
+        "Mintlify Docs" => add_mintlify_docs(settings.clone(), dataset_id).await?,
         _ => {
             eprintln!("Invalid example dataset selected: {}", selected_example);
             std::process::exit(1);
