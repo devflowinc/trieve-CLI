@@ -20,7 +20,7 @@ use trieve_client::{
 use crate::{AddSeedData, CreateDataset, DeleteDataset};
 
 use super::configure::TrieveConfiguration;
-use std::fmt;
+use std::{collections::HashSet, fmt};
 
 struct DatasetAndUsageDTO(DatasetAndUsage);
 
@@ -350,7 +350,178 @@ async fn add_yc_companies_seed_data(
     Ok(())
 }
 
-async fn add_philosiphize_this_seed_data(
+async fn add_trieve_mintlify_docs(
+    settings: TrieveConfiguration,
+    dataset_id: Option<String>,
+) -> Result<(), DefaultError> {
+    let res = add_json_dataset(
+        "https://gist.githubusercontent.com/skeptrunedev/dc34aa54f7810c913794ad045cc767d2/raw/4205cf3ab0dd55fccdc3a336bc26ce6a16b82cf3/trieve-mintlify-docs-chunks.json",
+        settings,
+        dataset_id,
+    )
+    .await?;
+
+    Ok(res)
+}
+
+async fn add_json_dataset(
+    gist_url: &str,
+    settings: TrieveConfiguration,
+    dataset_id: Option<String>,
+) -> Result<(), DefaultError> {
+    let chunks_to_create = ureq::get(gist_url).call().map_err(|e| DefaultError {
+        message: e.to_string(),
+    })?;
+    let chunks_to_create: serde_json::Value =
+        chunks_to_create.into_json().map_err(|e| DefaultError {
+            message: e.to_string(),
+        })?;
+
+    let config = Configuration {
+        base_path: settings.api_url.clone(),
+        api_key: Some(ApiKey {
+            prefix: None,
+            key: settings.api_key.clone(),
+        }),
+        ..Default::default()
+    };
+
+    let mut group_tracking_ids: HashSet<String> = HashSet::new();
+
+    chunks_to_create
+        .as_array()
+        .expect("Should always be an array")
+        .iter()
+        .for_each(|chunk| {
+            let chunk = chunk.as_object().expect("Should always be an object");
+            let cur_group_tracking_ids = chunk["group_tracking_ids"]
+                .as_array()
+                .unwrap_or(&vec![])
+                .iter()
+                .map(|tracking_id| {
+                    tracking_id
+                        .as_str()
+                        .expect("Should always be a string")
+                        .to_string()
+                })
+                .collect::<HashSet<String>>();
+            cur_group_tracking_ids.iter().for_each(|tracking_id| {
+                group_tracking_ids.insert(tracking_id.clone());
+            });
+        });
+
+    let chunk_datas: Vec<ChunkData> = chunks_to_create
+        .as_array()
+        .expect("Should always be an array")
+        .iter()
+        .map(|chunk| {
+            let chunk = chunk.as_object().expect("Should always be an object");
+            let chunk_data = ChunkData {
+                link: Some(chunk["link"].as_str().map(|s| s.to_string())),
+                chunk_html: Some(chunk["chunk_html"].as_str().map(|s| s.to_string())),
+                metadata: Some(
+                    chunk["metadata"]
+                        .as_object()
+                        .map(|m| m.clone())
+                        .map(serde_json::Value::Object),
+                ),
+                tracking_id: Some(chunk["tracking_id"].as_str().map(|s| s.to_string())),
+                tag_set: Some(
+                    chunk["tag_set"]
+                        .as_str()
+                        .map(|s| s.split(',').map(|s| s.to_string()).collect()),
+                ),
+                upsert_by_tracking_id: Some(Some(true)),
+                ..Default::default()
+            };
+            chunk_data
+        })
+        .collect();
+
+    for tracking_id in group_tracking_ids {
+        let group_data = CreateChunkGroupData {
+            name: tracking_id.clone(),
+            tracking_id: Some(Some(tracking_id.clone())),
+            ..Default::default()
+        };
+
+        let data = trieve_client::apis::chunk_group_api::CreateChunkGroupParams {
+            tr_dataset: dataset_id.clone().unwrap(),
+            create_chunk_group_data: group_data,
+        };
+
+        let result = create_chunk_group(&config, data)
+            .await
+            .map_err(|e| DefaultError {
+                message: e.to_string(),
+            })?
+            .entity
+            .unwrap();
+
+        match result {
+            trieve_client::apis::chunk_group_api::CreateChunkGroupSuccess::Status200(_) => continue,
+            trieve_client::apis::chunk_group_api::CreateChunkGroupSuccess::UnknownValue(val) => {
+                return Err(DefaultError {
+                    message: format!("Error creating group: {}", val),
+                });
+            }
+        }
+    }
+
+    let mut handles = vec![];
+
+    for chunks in chunk_datas.chunks(120) {
+        let settings = settings.clone();
+        let dataset_id = dataset_id.clone();
+        let chunks = chunks.to_vec();
+        let handle = tokio::spawn(async move {
+            let config = Configuration {
+                base_path: settings.api_url.clone(),
+                api_key: Some(ApiKey {
+                    prefix: None,
+                    key: settings.api_key.clone(),
+                }),
+                ..Default::default()
+            };
+
+            let data = CreateChunkParams {
+                tr_dataset: dataset_id.clone().unwrap(),
+                create_chunk_data: trieve_client::models::CreateChunkData::CreateBatchChunkData(
+                    chunks,
+                ),
+            };
+
+            let result = create_chunk(&config, data)
+                .await
+                .map_err(|e| DefaultError {
+                    message: e.to_string(),
+                })?
+                .entity
+                .unwrap();
+
+            match result {
+                trieve_client::apis::chunk_api::CreateChunkSuccess::Status200(_) => Ok(()),
+                trieve_client::apis::chunk_api::CreateChunkSuccess::UnknownValue(val) => {
+                    Err(DefaultError {
+                        message: format!("Error adding seed data: {}", val),
+                    })
+                }
+            }
+        });
+
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        let _ = handle.await.unwrap().map_err(|e| {
+            eprintln!("Error adding seed data: {:?}", e);
+        });
+    }
+
+    Ok(())
+}
+
+async fn add_philosophize_this_seed_data(
     settings: TrieveConfiguration,
     dataset_id: Option<String>,
 ) -> Result<(), DefaultError> {
@@ -544,7 +715,8 @@ pub async fn add_seed_data(
 
     match selected_example {
         "YC Companies" => add_yc_companies_seed_data(settings.clone(), dataset_id).await?,
-        "PhilosiphizeThis" => add_philosiphize_this_seed_data(settings.clone(), dataset_id).await?,
+        "PhilosiphizeThis" => add_philosophize_this_seed_data(settings.clone(), dataset_id).await?,
+        "Trieve Docs" => add_trieve_mintlify_docs(settings.clone(), dataset_id).await?,
         _ => {
             eprintln!("Invalid example dataset selected: {}", selected_example);
             std::process::exit(1);
