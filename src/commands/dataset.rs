@@ -438,6 +438,10 @@ async fn add_json_dataset(
                         .as_str()
                         .map(|s| s.split(',').map(|s| s.to_string()).collect()),
                 ),
+                group_tracking_ids: chunk.get("group_tracking_ids").map(|g| {
+                    g.as_array()
+                        .map(|a| a.iter().map(|v| v.as_str().unwrap().to_string()).collect())
+                }),
                 upsert_by_tracking_id: Some(Some(true)),
                 ..Default::default()
             };
