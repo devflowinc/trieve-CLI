@@ -14,7 +14,9 @@ use trieve_client::{
             DeleteDatasetParams, GetDatasetsFromOrganizationParams,
         },
     },
-    models::{ChunkData, CreateChunkGroupData, CreateDatasetRequest, Dataset, DatasetAndUsage},
+    models::{
+        ChunkReqPayload, CreateChunkGroupReqPayload, CreateDatasetRequest, Dataset, DatasetAndUsage,
+    },
 };
 
 use crate::{AddSeedData, CreateDataset, DeleteDataset};
@@ -57,6 +59,8 @@ async fn get_datasets_from_org(
     let data = GetDatasetsFromOrganizationParams {
         tr_organization: settings.organization_id.to_string().clone(),
         organization_id: settings.organization_id.to_string(),
+        limit: Some(10),
+        offset: Some(0),
     };
     let result = get_datasets_from_organization(&config, data)
         .await
@@ -279,11 +283,11 @@ async fn add_yc_companies_seed_data(
 
     let mut rdr = csv::Reader::from_reader(response.into_reader());
 
-    let chunk_data: Vec<ChunkData> = rdr
+    let chunk_data: Vec<ChunkReqPayload> = rdr
         .records()
         .map(|record| {
             let record = record.expect("Error reading CSV record");
-            let chunk_data = ChunkData {
+            let chunk_data = ChunkReqPayload {
                 chunk_html: Some(Some(record[0].to_string().replace(';', ","))),
                 link: Some(Some(record[1].to_string().replace(';', ","))),
                 tag_set: Some(Some(record[2].split('|').map(|s| s.to_string()).collect())),
@@ -316,9 +320,10 @@ async fn add_yc_companies_seed_data(
 
             let data = CreateChunkParams {
                 tr_dataset: dataset_id.clone().unwrap(),
-                create_chunk_data: trieve_client::models::CreateChunkData::CreateBatchChunkData(
-                    chunk,
-                ),
+                create_chunk_req_payload_enum:
+                    trieve_client::models::CreateChunkReqPayloadEnum::CreateBatchChunkReqPayload(
+                        chunk,
+                    ),
             };
 
             let result = create_chunk(&config, data)
@@ -417,13 +422,13 @@ async fn add_json_dataset(
             });
         });
 
-    let chunk_datas: Vec<ChunkData> = chunks_to_create
+    let chunk_datas: Vec<ChunkReqPayload> = chunks_to_create
         .as_array()
         .expect("Should always be an array")
         .iter()
         .map(|chunk| {
             let chunk = chunk.as_object().expect("Should always be an object");
-            let chunk_data = ChunkData {
+            let chunk_data = ChunkReqPayload {
                 link: Some(chunk["link"].as_str().map(|s| s.to_string())),
                 chunk_html: Some(chunk["chunk_html"].as_str().map(|s| s.to_string())),
                 metadata: Some(
@@ -450,15 +455,15 @@ async fn add_json_dataset(
         .collect();
 
     for tracking_id in group_tracking_ids {
-        let group_data = CreateChunkGroupData {
-            name: tracking_id.clone(),
+        let group_data = CreateChunkGroupReqPayload {
+            name: Some(Some(tracking_id.clone())),
             tracking_id: Some(Some(tracking_id.clone())),
             ..Default::default()
         };
 
         let data = trieve_client::apis::chunk_group_api::CreateChunkGroupParams {
             tr_dataset: dataset_id.clone().unwrap(),
-            create_chunk_group_data: group_data,
+            create_chunk_group_req_payload: group_data,
         };
 
         let result = create_chunk_group(&config, data)
@@ -497,9 +502,10 @@ async fn add_json_dataset(
 
             let data = CreateChunkParams {
                 tr_dataset: dataset_id.clone().unwrap(),
-                create_chunk_data: trieve_client::models::CreateChunkData::CreateBatchChunkData(
-                    chunks,
-                ),
+                create_chunk_req_payload_enum:
+                    trieve_client::models::CreateChunkReqPayloadEnum::CreateBatchChunkReqPayload(
+                        chunks,
+                    ),
             };
 
             let result = create_chunk(&config, data)
@@ -551,12 +557,12 @@ async fn add_philosophize_this_seed_data(
 
     let mut group_rdr = csv::Reader::from_reader(groups_to_create.into_reader());
 
-    let group_data: Vec<CreateChunkGroupData> = group_rdr
+    let group_data: Vec<CreateChunkGroupReqPayload> = group_rdr
         .records()
         .map(|record| {
             let record = record.expect("Error reading CSV record");
-            CreateChunkGroupData {
-                name: record[1].to_string(),
+            CreateChunkGroupReqPayload {
+                name: Some(Some(record[1].to_string())),
                 tracking_id: Some(Some(record[1].to_string())),
                 ..Default::default()
             }
@@ -566,7 +572,7 @@ async fn add_philosophize_this_seed_data(
     for group in group_data {
         let data = trieve_client::apis::chunk_group_api::CreateChunkGroupParams {
             tr_dataset: dataset_id.clone().unwrap(),
-            create_chunk_group_data: group,
+            create_chunk_group_req_payload: group,
         };
 
         let result = create_chunk_group(&config, data)
@@ -597,11 +603,11 @@ async fn add_philosophize_this_seed_data(
         .delimiter(b'|')
         .from_reader(chunks_to_create.into_reader());
 
-    let chunk_data: Vec<ChunkData> = chunk_rdr
+    let chunk_data: Vec<ChunkReqPayload> = chunk_rdr
         .records()
         .map(|record| {
             let record = record.expect("Error reading CSV record");
-            ChunkData {
+            ChunkReqPayload {
                 group_tracking_ids: Some(Some(vec![record[0].to_string()])),
                 tracking_id: Some(Some(record[1].to_string())),
                 chunk_html: Some(Some(record[2].to_string())),
@@ -635,9 +641,10 @@ async fn add_philosophize_this_seed_data(
 
             let data = CreateChunkParams {
                 tr_dataset: dataset_id.clone().unwrap(),
-                create_chunk_data: trieve_client::models::CreateChunkData::CreateBatchChunkData(
-                    chunk,
-                ),
+                create_chunk_req_payload_enum:
+                    trieve_client::models::CreateChunkReqPayloadEnum::CreateBatchChunkReqPayload(
+                        chunk,
+                    ),
             };
 
             let result = create_chunk(&config, data)

@@ -1707,7 +1707,7 @@ dependencies = [
 
 [[package]]
 name = "trieve"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "chrono",
  "clap",
@@ -1727,9 +1727,9 @@ dependencies = [
 
 [[package]]
 name = "trieve-client"
-version = "0.8.7"
+version = "0.10.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0355dbc23b45313e8d4cda481b7eb97a736e049ff970e902ae2f605df41261b"
+checksum = "892cdfc135234ce22133979192d8f8af32872f17ffe85e3c5c21f9fafd631bf9"
 dependencies = [
  "reqwest",
  "serde",

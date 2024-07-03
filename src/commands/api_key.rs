@@ -59,6 +59,7 @@ pub async fn generate_api_key(
         set_user_api_key_request: SetUserApiKeyRequest {
             name: name.clone(),
             role: role_num,
+            ..Default::default()
         },
     };
 

@@ -1,7 +1,7 @@
 use trieve_client::{
     apis::{
         configuration::{ApiKey, Configuration},
-        organization_api::{CreateOrganizationParams, DeleteOrganizationByIdParams},
+        organization_api::{CreateOrganizationParams, DeleteOrganizationParams},
     },
     models::CreateOrganizationData,
 };
@@ -189,9 +189,9 @@ pub async fn delete_organization(
         ..Default::default()
     };
 
-    let result = trieve_client::apis::organization_api::delete_organization_by_id(
+    let result = trieve_client::apis::organization_api::delete_organization(
         &configuration,
-        DeleteOrganizationByIdParams {
+        DeleteOrganizationParams {
             tr_organization: organization_id.clone(),
             organization_id: organization_id.clone(),
         },
@@ -206,8 +206,8 @@ pub async fn delete_organization(
     .unwrap();
 
     match result {
-        trieve_client::apis::organization_api::DeleteOrganizationByIdSuccess::Status200(org) => {
-            println!("Organization '{}' deleted.", org.id);
+        trieve_client::apis::organization_api::DeleteOrganizationSuccess::Status204() => {
+            println!("Organization '{}' deleted.", organization_id);
             Ok(())
         }
         _ => {
