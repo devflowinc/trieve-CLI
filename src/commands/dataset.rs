@@ -15,7 +15,8 @@ use trieve_client::{
         },
     },
     models::{
-        ChunkReqPayload, CreateChunkGroupReqPayload, CreateDatasetRequest, Dataset, DatasetAndUsage,
+        ChunkReqPayload, CreateChunkGroupReqPayload, CreateDatasetRequest, Dataset,
+        DatasetAndUsage, GeoInfo,
     },
 };
 
@@ -383,6 +384,19 @@ async fn add_mintlify_docs(
     Ok(res)
 }
 
+async fn add_location_test_docs(
+    settings: TrieveConfiguration,
+    dataset_id: Option<String>,
+) -> Result<(), DefaultError> {
+    let res = add_json_dataset(
+        "https://gist.githubusercontent.com/densumesh/a3971dcd77804be7e4cef149b727a6ec/raw/4380b96f1a3c1ecaf0e7afa36f47cc3a29a6559b/location_test_data.json",
+        settings,
+        dataset_id,
+    ).await?;
+
+    Ok(res)
+}
+
 async fn add_json_dataset(
     gist_url: &str,
     settings: TrieveConfiguration,
@@ -413,7 +427,7 @@ async fn add_json_dataset(
         .iter()
         .for_each(|chunk| {
             let chunk = chunk.as_object().expect("Should always be an object");
-            let cur_group_tracking_ids = chunk.get("group_tracking_ids").map(|g| {
+            chunk.get("group_tracking_ids").map(|g| {
                 g.as_array().map(|a| {
                     a.iter().for_each(|v| {
                         group_tracking_ids.insert(v.as_str().unwrap().to_string());
@@ -429,23 +443,37 @@ async fn add_json_dataset(
         .map(|chunk| {
             let chunk = chunk.as_object().expect("Should always be an object");
             let chunk_data = ChunkReqPayload {
-                link: Some(chunk["link"].as_str().map(|s| s.to_string())),
-                chunk_html: Some(chunk["chunk_html"].as_str().map(|s| s.to_string())),
-                metadata: Some(
-                    chunk["metadata"]
-                        .as_object()
+                link: chunk.get("link").map(|s| s.as_str().map(|s| s.to_string())),
+                chunk_html: chunk
+                    .get("chunk_html")
+                    .map(|s| s.as_str().map(|s| s.to_string())),
+                metadata: chunk.get("metadata").map(|g| {
+                    g.as_object()
                         .map(|m| m.clone())
-                        .map(serde_json::Value::Object),
-                ),
-                tracking_id: Some(chunk["tracking_id"].as_str().map(|s| s.to_string())),
-                tag_set: Some(
-                    chunk["tag_set"]
-                        .as_str()
-                        .map(|s| s.split(',').map(|s| s.to_string()).collect()),
-                ),
+                        .map(serde_json::Value::Object)
+                }),
+                tracking_id: chunk
+                    .get("tracking_id")
+                    .map(|s| s.as_str().map(|v| v.to_string())),
+                tag_set: chunk.get("tag_set").map(|s| {
+                    s.as_str()
+                        .map(|s| s.split(',').map(|s| s.to_string()).collect())
+                }),
                 group_tracking_ids: chunk.get("group_tracking_ids").map(|g| {
                     g.as_array()
                         .map(|a| a.iter().map(|v| v.as_str().unwrap().to_string()).collect())
+                }),
+                location: chunk.get("location").map(|l| {
+                    l.as_object().map(|l| {
+                        Box::new(GeoInfo {
+                            lat: Box::new(trieve_client::models::GeoTypes::Number(
+                                l.get("lat").unwrap().as_f64().unwrap(),
+                            )),
+                            lon: Box::new(trieve_client::models::GeoTypes::Number(
+                                l.get("lon").unwrap().as_f64().unwrap(),
+                            )),
+                        })
+                    })
                 }),
                 upsert_by_tracking_id: Some(Some(true)),
                 ..Default::default()
@@ -724,6 +752,7 @@ pub async fn add_seed_data(
             "PhilosiphizeThis",
             "Trieve Docs",
             "Mintlify Docs",
+            "Location Test Dataset",
         ],
     )
     .prompt()
@@ -739,6 +768,7 @@ pub async fn add_seed_data(
         "PhilosiphizeThis" => add_philosophize_this_seed_data(settings.clone(), dataset_id).await?,
         "Trieve Docs" => add_trieve_mintlify_docs(settings.clone(), dataset_id).await?,
         "Mintlify Docs" => add_mintlify_docs(settings.clone(), dataset_id).await?,
+        "Location Test Dataset" => add_location_test_docs(settings.clone(), dataset_id).await?,
         _ => {
             eprintln!("Invalid example dataset selected: {}", selected_example);
             std::process::exit(1);
