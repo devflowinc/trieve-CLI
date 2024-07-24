@@ -459,115 +459,14 @@ async fn add_philosophize_this_seed_data(
     settings: TrieveConfiguration,
     dataset_id: Option<String>,
 ) -> Result<(), DefaultError> {
-    let groups_to_create = ureq::get("https://gist.githubusercontent.com/densumesh/241be979beb48b05a01591b7ff40ddca/raw/83ad1c0c75c016832368183fc2cb86cb3d7f9c50/philosiphizethis-epLinks.csv").call().map_err(
-        |e| DefaultError {
-            message: e.to_string(),
-        }
-    )?;
+    let res = add_json_dataset(
+        "https://gist.githubusercontent.com/aaryanpunia/b1a9262fdd68d6bd27aa4ead8dd16f9b/raw/c89773619d55895dbde9892b09076b51df81e177/gistfile1.txt",
+        settings,
+        dataset_id,
+    )
+    .await?;
 
-    let config = Configuration {
-        base_path: settings.api_url.clone(),
-        api_key: Some(ApiKey {
-            prefix: None,
-            key: settings.api_key.clone(),
-        }),
-        ..Default::default()
-    };
-
-    let mut group_rdr = csv::Reader::from_reader(groups_to_create.into_reader());
-
-    let group_data: Vec<CreateSingleChunkGroupReqPayload> = group_rdr
-        .records()
-        .map(|record| {
-            let record = record.expect("Error reading CSV record");
-            CreateSingleChunkGroupReqPayload {
-                name: Some(Some(record[1].to_string())),
-                tracking_id: Some(Some(record[1].to_string())),
-                ..Default::default()
-            }
-        })
-        .collect();
-
-    for group in group_data {
-        let data =
-            trieve_client::models::CreateChunkGroupReqPayloadEnum::CreateSingleChunkGroupReqPayload(
-                Box::new(group),
-            );
-
-        create_chunk_group(&config, &dataset_id.clone().unwrap(), data)
-            .await
-            .map_err(|e| DefaultError {
-                message: e.to_string(),
-            })?;
-    }
-
-    let chunks_to_create = ureq::get("https://gist.githubusercontent.com/densumesh/33f34fa0ca115723b2c25a862a2d2a4b/raw/f282e21f12ccaa2ad10a8fa831d238fa4a8aa1b0/philosiphizethis-chunksToCreate.csv").call().map_err(
-        |e| DefaultError {
-            message: e.to_string(),
-        }
-    )?;
-
-    let mut chunk_rdr = ReaderBuilder::new()
-        .delimiter(b'|')
-        .from_reader(chunks_to_create.into_reader());
-
-    let chunk_data: Vec<ChunkReqPayload> = chunk_rdr
-        .records()
-        .map(|record| {
-            let record = record.expect("Error reading CSV record");
-            ChunkReqPayload {
-                group_tracking_ids: Some(Some(vec![record[0].to_string()])),
-                tracking_id: Some(Some(record[1].to_string())),
-                chunk_html: Some(Some(record[2].to_string())),
-                time_stamp: Some(Some(record[3].to_string())),
-                link: Some(Some(record[4].to_string())),
-                metadata: Some(Some(json!({
-                    "episode_number": record[5].to_string(),
-                    "episode_title": record[6].to_string(),
-                }))),
-                upsert_by_tracking_id: Some(Some(true)),
-                ..Default::default()
-            }
-        })
-        .collect();
-
-    let mut handles = vec![];
-
-    for chunk in chunk_data.chunks(120) {
-        let settings = settings.clone();
-        let dataset_id = dataset_id.clone();
-        let chunk = chunk.to_vec();
-        let handle = tokio::spawn(async move {
-            let config = Configuration {
-                base_path: settings.api_url,
-                api_key: Some(ApiKey {
-                    prefix: None,
-                    key: settings.api_key,
-                }),
-                ..Default::default()
-            };
-
-            let data =
-                trieve_client::models::CreateChunkReqPayloadEnum::CreateBatchChunkReqPayload(chunk);
-
-            create_chunk(&config, &dataset_id.clone().unwrap(), data)
-                .await
-                .map_err(|e| DefaultError {
-                    message: e.to_string(),
-                })?;
-
-            Ok(())
-        });
-        handles.push(handle);
-    }
-
-    for handle in handles {
-        let _ = handle.await.unwrap().map_err(|e: DefaultError| {
-            eprintln!("Error adding seed data: {:?}", e);
-        });
-    }
-
-    Ok(())
+    Ok(res)
 }
 
 pub async fn add_seed_data(
