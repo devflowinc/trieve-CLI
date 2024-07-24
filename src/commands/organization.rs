@@ -1,9 +1,6 @@
 use trieve_client::{
-    apis::{
-        configuration::{ApiKey, Configuration},
-        organization_api::{CreateOrganizationParams, DeleteOrganizationByIdParams},
-    },
-    models::CreateOrganizationData,
+    apis::configuration::{ApiKey, Configuration},
+    models::CreateOrganizationReqPayload,
 };
 
 use crate::{
@@ -21,38 +18,30 @@ pub async fn switch_organization(
     let organization_id = if organization_data.organization_id.is_none() {
         let result = get_user(settings.api_url.clone(), settings.api_key.clone()).await;
 
-        match result {
-            trieve_client::apis::auth_api::GetMeSuccess::Status200(user) => {
-                let orgs = user
-                    .orgs
-                    .iter()
-                    .map(|org| OrgDTO(org.clone()))
-                    .collect::<Vec<OrgDTO>>();
+        let orgs = result
+            .orgs
+            .iter()
+            .map(|org| OrgDTO(org.clone()))
+            .collect::<Vec<OrgDTO>>();
 
-                let selected_organization =
-                    inquire::Select::new("Select an organization to use:", orgs.clone())
-                        .with_starting_cursor(
-                            orgs.iter()
-                                .position(|o| {
-                                    o.0.id
-                                        == profiles
-                                            .iter()
-                                            .find(|p| p.selected)
-                                            .map(|p| p.settings.organization_id)
-                                            .unwrap_or_default()
-                                })
-                                .unwrap_or(0),
-                        )
-                        .prompt()
-                        .unwrap();
+        let selected_organization =
+            inquire::Select::new("Select an organization to use:", orgs.clone())
+                .with_starting_cursor(
+                    orgs.iter()
+                        .position(|o| {
+                            o.0.id
+                                == profiles
+                                    .iter()
+                                    .find(|p| p.selected)
+                                    .map(|p| p.settings.organization_id)
+                                    .unwrap_or_default()
+                        })
+                        .unwrap_or(0),
+                )
+                .prompt()
+                .unwrap();
 
-                selected_organization.0.id
-            }
-            _ => {
-                eprintln!("Error authenticating: {:?}", result);
-                std::process::exit(1);
-            }
-        }
+        selected_organization.0.id
     } else {
         organization_data
             .organization_id
@@ -124,21 +113,16 @@ pub async fn create_organization(
 
     let result = trieve_client::apis::organization_api::create_organization(
         &configuration,
-        CreateOrganizationParams {
-            create_organization_data: CreateOrganizationData { name },
-        },
+        CreateOrganizationReqPayload { name },
     )
     .await
     .map_err(|e| {
         eprintln!("Error getting user: {:?}", e);
         std::process::exit(1);
-    })
-    .unwrap()
-    .entity
-    .unwrap();
+    });
 
     match result {
-        trieve_client::apis::organization_api::CreateOrganizationSuccess::Status200(org) => {
+        Ok(org) => {
             println!("Organization '{}' created.", org.id);
             Ok(())
         }
@@ -156,26 +140,18 @@ pub async fn delete_organization(
     let organization_id = if data.organization_id.is_none() {
         let result = get_user(settings.api_url.clone(), settings.api_key.clone()).await;
 
-        match result {
-            trieve_client::apis::auth_api::GetMeSuccess::Status200(user) => {
-                let orgs = user
-                    .orgs
-                    .iter()
-                    .map(|org| OrgDTO(org.clone()))
-                    .collect::<Vec<OrgDTO>>();
+        let orgs = result
+            .orgs
+            .iter()
+            .map(|org| OrgDTO(org.clone()))
+            .collect::<Vec<OrgDTO>>();
 
-                let selected_organization =
-                    inquire::Select::new("Select an organization to delete:", orgs.clone())
-                        .prompt()
-                        .unwrap();
+        let selected_organization =
+            inquire::Select::new("Select an organization to delete:", orgs.clone())
+                .prompt()
+                .unwrap();
 
-                selected_organization.0.id.to_string()
-            }
-            _ => {
-                eprintln!("Error authenticating: {:?}", result);
-                std::process::exit(1);
-            }
-        }
+        selected_organization.0.id.to_string()
     } else {
         data.organization_id.unwrap()
     };
@@ -189,25 +165,20 @@ pub async fn delete_organization(
         ..Default::default()
     };
 
-    let result = trieve_client::apis::organization_api::delete_organization_by_id(
+    let result = trieve_client::apis::organization_api::delete_organization(
         &configuration,
-        DeleteOrganizationByIdParams {
-            tr_organization: organization_id.clone(),
-            organization_id: organization_id.clone(),
-        },
+        &organization_id.clone(),
+        &organization_id.clone(),
     )
     .await
     .map_err(|e| {
         eprintln!("Error getting organization: {:?}", e);
         std::process::exit(1);
-    })
-    .unwrap()
-    .entity
-    .unwrap();
+    });
 
     match result {
-        trieve_client::apis::organization_api::DeleteOrganizationByIdSuccess::Status200(org) => {
-            println!("Organization '{}' deleted.", org.id);
+        Ok(_) => {
+            println!("Organization '{}' deleted.", organization_id);
             Ok(())
         }
         _ => {

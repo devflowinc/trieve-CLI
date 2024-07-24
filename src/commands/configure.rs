@@ -12,7 +12,7 @@ use trieve_client::{
         auth_api::get_me,
         configuration::{ApiKey, Configuration},
     },
-    models::Organization,
+    models::{Organization, SlimUser},
 };
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -85,10 +85,7 @@ impl fmt::Display for OrgDTO {
     }
 }
 
-pub async fn get_user(
-    api_url: String,
-    api_key: String,
-) -> trieve_client::apis::auth_api::GetMeSuccess {
+pub async fn get_user(api_url: String, api_key: String) -> SlimUser {
     let configuration = Configuration {
         base_path: api_url.clone(),
         api_key: Some(ApiKey {
@@ -104,8 +101,6 @@ pub async fn get_user(
             eprintln!("Error getting user: {:?}", e);
             std::process::exit(1);
         })
-        .unwrap()
-        .entity
         .unwrap()
 }
 
@@ -142,32 +137,22 @@ async fn configure(api_url: String, mut api_key: Option<String>) -> TrieveConfig
         server.abort();
     }
 
-    let result = get_user(api_url.clone(), api_key.clone().unwrap()).await;
+    let user = get_user(api_url.clone(), api_key.clone().unwrap()).await;
 
-    match result {
-        trieve_client::apis::auth_api::GetMeSuccess::Status200(user) => {
-            println!("\nWelcome, {}!", user.name.unwrap().unwrap());
-            let orgs = user
-                .orgs
-                .iter()
-                .map(|org| OrgDTO(org.clone()))
-                .collect::<Vec<OrgDTO>>();
+    println!("\nWelcome, {}!", user.name.unwrap().unwrap());
+    let orgs = user
+        .orgs
+        .iter()
+        .map(|org| OrgDTO(org.clone()))
+        .collect::<Vec<OrgDTO>>();
+    let selected_organization = inquire::Select::new("Select an organization to use:", orgs)
+        .prompt()
+        .unwrap();
 
-            let selected_organization =
-                inquire::Select::new("Select an organization to use:", orgs)
-                    .prompt()
-                    .unwrap();
-
-            TrieveConfiguration {
-                api_key: api_key.unwrap(),
-                organization_id: selected_organization.0.id,
-                api_url: api_url.clone(),
-            }
-        }
-        _ => {
-            eprintln!("Error authenticating: {:?}", result);
-            std::process::exit(1);
-        }
+    TrieveConfiguration {
+        api_key: api_key.unwrap(),
+        organization_id: selected_organization.0.id,
+        api_url: api_url.clone(),
     }
 }
 
