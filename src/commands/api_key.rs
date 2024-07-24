@@ -1,7 +1,4 @@
-use trieve_client::{
-    apis::{configuration::Configuration, user_api::SetUserApiKeyParams},
-    models::SetUserApiKeyRequest,
-};
+use trieve_client::{apis::configuration::Configuration, models::SetUserApiKeyRequest};
 
 use crate::ApiKeyData;
 
@@ -55,11 +52,12 @@ pub async fn generate_api_key(
         ..Default::default()
     };
 
-    let data = SetUserApiKeyParams {
-        set_user_api_key_request: SetUserApiKeyRequest {
-            name: name.clone(),
-            role: role_num,
-        },
+    let data = SetUserApiKeyRequest {
+        name: name.clone(),
+        dataset_ids: None,
+        organization_ids: None,
+        scopes: None,
+        role: role_num,
     };
 
     let user = trieve_client::apis::user_api::set_user_api_key(&config, data)
@@ -67,18 +65,15 @@ pub async fn generate_api_key(
         .map_err(|e| {
             eprintln!("Error generating API Key: {:?}", e);
             std::process::exit(1);
-        })
-        .unwrap()
-        .entity
-        .unwrap();
+        });
 
     match user {
-        trieve_client::apis::user_api::SetUserApiKeySuccess::Status200(api_key) => {
+        Ok(api_key) => {
             println!("\nAPI Key generated successfully!\n");
             println!("Name: {}", name);
             println!("API Key: {}", api_key.api_key);
         }
-        trieve_client::apis::user_api::SetUserApiKeySuccess::UnknownValue(_) => {
+        Err(_) => {
             eprintln!("Error generating API Key.");
             std::process::exit(1);
         }

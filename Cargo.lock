@@ -1727,9 +1727,9 @@ dependencies = [
 
 [[package]]
 name = "trieve-client"
-version = "0.8.7"
+version = "0.11.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0355dbc23b45313e8d4cda481b7eb97a736e049ff970e902ae2f605df41261b"
+checksum = "4432ed3a7ac6c9fda81fa413455ac9100f5e638a0a8a96a8ce32368ac7da7898"
 dependencies = [
  "reqwest",
  "serde",
