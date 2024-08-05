@@ -1,5 +1,7 @@
+use crate::commands::configure::TrieveConfiguration;
 use clap::{Args, Parser, Subcommand};
 use commands::configure::TrieveProfile;
+use std::env;
 
 mod commands;
 
@@ -55,7 +57,7 @@ enum Organization {
     /// Create an organization
     Create(CreateOrganization),
     /// Delete an organization
-    Delete(DeleteOrganization)
+    Delete(DeleteOrganization),
 }
 
 #[derive(Subcommand)]
@@ -158,6 +160,8 @@ struct DeleteOrganization {
 #[tokio::main]
 async fn main() {
     let args = Cli::parse();
+    let no_profile =
+        env::var("TRIEVE_NO_PROFILE").unwrap_or_else(|_| String::new()) == "true";
 
     let profiles: TrieveProfile = confy::load("trieve", "profiles")
         .map_err(|e| {
@@ -165,7 +169,15 @@ async fn main() {
         })
         .unwrap_or_default();
 
-    let settings = if args.profile.is_some() {
+    let settings = if no_profile {
+        TrieveConfiguration::from_env().unwrap_or_else(|e| {
+            eprintln!(
+                "Error creating configuration from environment variables: {:?}",
+                e
+            );
+            std::process::exit(1);
+        })
+    } else if args.profile.is_some() {
         let profile_name = args.profile.unwrap();
         let profile = profiles
             .inner
