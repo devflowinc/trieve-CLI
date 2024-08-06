@@ -1,5 +1,5 @@
 use std::{
-    fmt,
+    env, fmt,
     ops::{Deref, DerefMut},
 };
 
@@ -14,6 +14,7 @@ use trieve_client::{
     },
     models::{Organization, SlimUser},
 };
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct TrieveConfiguration {
@@ -73,6 +74,27 @@ impl Default for TrieveConfiguration {
             organization_id: uuid::Uuid::nil(),
             api_url: "https://api.trieve.ai".to_string(),
         }
+    }
+}
+
+impl TrieveConfiguration {
+    pub(crate) fn from_env() -> Result<Self, Box<dyn std::error::Error>> {
+        let api_key = env::var("TRIEVE_API_KEY").unwrap_or_else(|_| String::new());
+        let organization_id = env::var("TRIEVE_ORG_ID").unwrap_or_else(|_| String::new());
+        let api_url =
+            env::var("TRIEVE_API_URL").unwrap_or_else(|_| "https://api.trieve.ai".to_string());
+
+        let organization_id = if !organization_id.is_empty() {
+            organization_id.parse()?
+        } else {
+            Uuid::nil()
+        };
+
+        Ok(Self {
+            api_key,
+            organization_id,
+            api_url,
+        })
     }
 }
 

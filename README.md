@@ -29,6 +29,25 @@ trieve login
 
 Then, you can use any of the available commands to interact with the Trieve service.
 
+## Setting Configuration via Environment Variables
+
+You can configure the Trieve CLI using environment variables. This is especially useful for CI environments where you want to avoid interactive configuration.
+
+To configure the Trieve CLI using environment variables, set the following environment variables and run the desired command:
+
+- **TRIEVE_NO_PROFILE=true**
+- **TRIEVE_API_KEY=your_api_key**
+- **TRIEVE_ORG_ID=your_organization_id**
+- **TRIEVE_API_URL=your_api_url** (optional, defaults to https://api.trieve.ai)
+
+#### Example:
+
+```sh
+  TRIEVE_NO_PROFILE=true TRIEVE_API_KEY=api_key TRIEVE_ORG_ID=org_id trieve dataset list
+```
+
+With this configuration, you can skip the trieve login step and directly use the CLI commands.
+
 ## Features
 
 ### General
